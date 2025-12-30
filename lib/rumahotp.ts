@@ -1,22 +1,32 @@
 import axios from 'axios'
 import QRCode from 'qrcode'
-import { sendTelegram } from './telegram'
+
+const API_KEY = process.env.RUMAHOTP_API_KEY!
+const BASE_URL = process.env.RUMAHOTP_BASE_URL!
 
 export async function createDeposit(nominal: number) {
-  const r = await axios.get(`${process.env.RUMAHOTP_BASE_URL}/v2/deposit/create?amount=${nominal}&payment_id=qris`, {
-    headers: { 'x-apikey': process.env.RUMAHOTP_API_KEY! }
-  })
+  const adminFee = Math.ceil(nominal * 0.005) + 500
+  const total = nominal + adminFee
 
-  const d = r.data.data
-  const qr = await QRCode.toDataURL(d.qr_string)
-  await sendTelegram(`PENDING ${d.deposit_id}`)
+  const res = await axios.get(
+    `${BASE_URL}/v2/deposit/create?amount=${total}&payment_id=qris`,
+    { headers: { 'x-apikey': API_KEY } }
+  )
 
-  return { id: d.deposit_id, qr, total: nominal }
+  const qrImage = await QRCode.toDataURL(res.data.data.qr_string)
+
+  return {
+    transactionId: res.data.data.deposit_id,
+    qrImage,
+    nominal,
+    adminFee
+  }
 }
 
-export async function checkStatus(id: string) {
-  const r = await axios.get(`${process.env.RUMAHOTP_BASE_URL}/v2/deposit/get_status?deposit_id=${id}`, {
-    headers: { 'x-apikey': process.env.RUMAHOTP_API_KEY! }
-  })
-  return r.data.data.status
+export async function checkStatus(depositId: string) {
+  const res = await axios.get(
+    `${BASE_URL}/v2/deposit/get_status?deposit_id=${depositId}`,
+    { headers: { 'x-apikey': API_KEY } }
+  )
+  return res.data.data.status
 }
